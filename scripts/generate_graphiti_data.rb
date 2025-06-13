@@ -66,7 +66,7 @@ def gen_graph(imp_file, unknowns_file)
   }
 end
 
-puts JSON.generate({
+puts JSON.pretty_generate({
   "timestamp" => Time.now.utc.to_i,
   "commit_hash" => `git rev-parse HEAD`.chomp,
   "equations" => equations,
