@@ -16,6 +16,7 @@ on:
       - '**/generate_equation_implication_js.py'
       - '**/generate_equation_explorer_graph.py'
       - '**/generate_graphiti_data.rb'
+      - '**/former_generate_graphiti_data.rb'
       - 'lean-toolchain'
       - 'lakefile.toml'
       - 'lake-manifest.json'
@@ -35,6 +36,7 @@ on:
       - '**/generate_equation_implication_js.py'
       - '**/generate_equation_explorer_graph.py'
       - '**/generate_graphiti_data.rb'
+      - '**/former_generate_graphiti_data.rb'
       - './scripts/**'
       - 'lean-toolchain'
       - 'lakefile.toml'
@@ -210,11 +212,15 @@ jobs:
           ruby-version: "3.0"  # Specify Ruby version
           bundler-cache: true  # Enable caching for bundler
 
-      - name: Generate home_page/graphiti/graph.json
+      - name: Generate and compare graph.json files
         run: |
           ~/.elan/bin/lake exe extract_implications unknowns > /tmp/unknowns.json
           ~/.elan/bin/lake exe extract_implications unknowns --finite-only > /tmp/unknowns.fin.json
           ruby scripts/generate_graphiti_data.rb data/duals.json /tmp/raw_data/general_implications_closure.json /tmp/unknowns.json /tmp/raw_data/finite_implications_closure.json /tmp/unknowns.fin.json > home_page/graphiti/graph.json
+          ruby scripts/former_generate_graphiti_data.rb data/duals.json /tmp/raw_data/general_implications_closure.json /tmp/unknowns.json /tmp/raw_data/finite_implications_closure.json /tmp/unknowns.fin.json > home_page/graphiti/graph1.json
+
+          echo "Comparing graph.json and graph1.json..."
+          diff home_page/graphiti/graph.json home_page/graphiti/graph1.json || echo "Differences found"
 
       - name: Build website using Jekyll
         if: github.event_name == 'push' && env.HOME_PAGE_EXISTS == 'true'
