@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 
 =begin
+This code is a port of find_equation_id.py
+
 This module maps magma equations from/to their id
 
 It can be used as a script in interactive mode (with the -i switch), as
@@ -9,12 +11,12 @@ It can be used as a script in interactive mode (with the -i switch), as
 
 or by passing arguments to it from stdin or as arguments: a (space-separated)
 list of ids or of equations (in which the operation can be ".", "*", or "◇"),
-optionally preceeded by "*" to dualize the equation (and characters "[,]" are
+optionally preceded by "*" to dualize the equation (and characters "[,]" are
 ignored):
 
     ruby find_equation_id.rb [12, 34] "(w*u)=t*(u*x)" 4567 "*89" "*67" "0=(1*2)*(0*1)"
 
-When used as a module imported in python code, one can use
+When this file is required as a module in another Ruby program, one can use
 - eq = Equation.from_id(integer id)
 - eq = Equation.from_str(string)
 - eq.id()
@@ -52,12 +54,12 @@ class Equation
     
     def to_s
       rhyme_enum = @rhyme.each
-      lhs_str = self.class.expr_str(@lhs_shape, rhyme_enum, false)
-      rhs_str = self.class.expr_str(@rhs_shape, rhyme_enum, false)
+      lhs_str = self.class._expr_str(@lhs_shape, rhyme_enum, false)
+      rhs_str = self.class._expr_str(@rhs_shape, rhyme_enum, false)
       "#{lhs_str} = #{rhs_str}"
     end
     
-    def self.expr_str(shape, rhyme_enum, parenthesize)
+    def self._expr_str(shape, rhyme_enum, parenthesize)
       if shape.nil?
         i, j = rhyme_enum.next.divmod(VAR_NAMES.length)
         if i == 0
@@ -65,8 +67,8 @@ class Equation
         end
         return VAR_NAMES[j] + i.to_s
       end
-      left_str = expr_str(shape[0], rhyme_enum, true)
-      right_str = expr_str(shape[1], rhyme_enum, true)
+      left_str = _expr_str(shape[0], rhyme_enum, true)
+      right_str = _expr_str(shape[1], rhyme_enum, true)
       if parenthesize
         "(#{left_str} ◇ #{right_str})"
       else
@@ -89,6 +91,16 @@ class Equation
     def self.from_str(eq_str)
       # Parse and canonicalize an equation given as a string.
       _equation_from_str(eq_str)
+    end
+    
+    def orders
+      # Returns the number of operations on the lhs and rhs as a tuple.
+      [shape_order(@lhs_shape), shape_order(@rhs_shape)]
+    end
+    
+    def num_vars
+      # Returns the number of distinct variables in the equation.
+      @rhyme.max + 1
     end
     
     def dual
@@ -247,7 +259,7 @@ def shape_lt(shape1, shape2)
 end
 
 
-##### Generating all rhymes, all shapes, all equational_theories
+##### Generating all rhymes, all shapes, all equations
 def canonicalize_rhyme(rhyme)
   variables = {}
   rhyme.map do |x|
@@ -276,6 +288,57 @@ def _all_rhymes_help(n, max_used, &block)
   (0..(max_used + 1)).each do |x|
     _all_rhymes_help(n - 1, [max_used, x].max) do |rest|
       yield [x] + rest
+    end
+  end
+end
+
+# Generate all possible shapes for expressions with a given number of operations.
+def all_shapes(order)
+  return enum_for(:all_shapes, order) unless block_given?
+
+  if order == 0
+    yield nil
+  else
+    order.times do |i|
+      all_shapes(i).each do |left|
+        all_shapes(order - 1 - i).each do |right|
+          yield [left, right]
+        end
+      end
+    end
+  end
+end
+
+# Generate all unique equations of some order up to symmetry.
+# To generate equations of all orders: (0..).lazy.flat_map { |n| all_eqs(n) }
+def all_eqs(order)
+  return enum_for(:all_eqs, order) unless block_given?
+
+  half = order / 2 + 1
+
+  (0...half).each do |lhs_order|
+    all_shapes(lhs_order).each do |lhs_shape|
+      all_shapes(order - lhs_order).each do |rhs_shape|
+        if order == lhs_order * 2 && shape_lt(rhs_shape, lhs_shape)
+          next
+        end
+
+        symmetric_shape = lhs_shape == rhs_shape
+
+        all_rhymes(order + 1).each do |rhyme|
+          if symmetric_shape
+            flipped = rhyme[half..] + rhyme[0...half]
+            if (canonicalize_rhyme(flipped) <=> rhyme) == -1
+              next
+            end
+            if rhyme == flipped && order > 0
+              next
+            end
+          end
+
+          yield Equation.new(lhs_shape, rhs_shape, rhyme)
+        end
+      end
     end
   end
 end
@@ -368,13 +431,6 @@ def get_rhyme_by_id(n, rhyme_num, max_used = 0)
     n -= 1
   end
   result
-end
-
-# Map from rhyme tp id and back
-# Number of rhymes of n slots whose minimum number is at most max_used + 1
-def _num_rhyme_help(n, max_used)
-  return 1 if n == 0
-  (max_used + 1) * _num_rhyme_help(n - 1, max_used) + _num_rhyme_help(n - 1, max_used + 1)
 end
 
 # Gives the rhyme id (zero-based) among rhymes with a given number of variables
@@ -574,7 +630,6 @@ def process_equation(eq_str)
       else
         puts "Equation #{input_eq}: #{eq}"
       end
-      #puts "Processing ID: #{input_eq}"  # placeholder for actual processing
     else
       input_eq = Equation.from_str(eq_str)
       if dual
@@ -585,7 +640,6 @@ def process_equation(eq_str)
         eq_num = input_eq.id
         puts "The equation '#{eq_str}' is Equation #{eq_num}: #{input_eq}"
       end
-      # puts "Processing: #{eq_str}"  # placeholder
     end
 end
 
